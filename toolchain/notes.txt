@@ -1,0 +1,46 @@
+GW rootfs on google drive:
+https://drive.google.com/open?id=1MONoRfuyh_v2V6V42dY0MrLDpGFBNi6x
+
+Install aarch64 compilers with:
+sudo apt-get install g++-7-aarch64-linux-gnu gcc-7-aarch64-linux-gnu
+
+Cmake flags:
+cmake -DCMAKE_TOOLCHAIN_FILE="toolchain/arm-compile.cmake" -DROOTFS=${Absolute_path_to_rootfs} ..
+
+ROOTFS: should be the path to the root file system of the target device
+
+To extract the rootfs:
+sudo tar xjf ~/workspace/GW_rootfs/gateworks_bionic_aarch64.tbz2 -C ./rootfs
+(-C is to keep symbolic link)
+
+To add more libraries to the rootfs:
+1. On the host computer (yours!): sudo apt install qemu qemu-user-static binfmt-support
+2. Run the following commands:
+sudo cp /usr/bin/qemu-aarch64-static ${ROOTFS}/usr/bin/
+sudo mount --bind /dev/ ${ROOTFS}/dev/
+sudo mount --bind /sys/ ${ROOTFS}/sys/
+sudo mount --bind /proc/ ${ROOTFS}/proc/
+
+sudo cp /etc/resolv.conf ${ROOTFS}/etc/resolv.conf.host
+sudo mv ${ROOTFS}/etc/resolv.conf ${ROOTFS}/etc/resolv.conf.saved
+sudo mv ${ROOTFS}/etc/resolv.conf.host ${ROOTFS}/etc/resolv.conf
+3. chroot into the rootfs and use apt-get to install packages:
+sudo LC_ALL=C LANG=C.UTF-8 chroot ${ROOTFS} /bin/bash
+
+**** Do apt-get or whatever needed to update the file system
+
+4. To tar and clean the rootfs - Exit from chroot and run:
+sudo umount ./proc
+sudo umount ./sys
+sudo umount ./dev
+sudo rm usr/bin/qemu-aarch64-static
+sudo rm etc/resolv.conf
+sudo mv etc/resolv.conf.saved etc/resolv.conf
+sudo rm -rf var/lib/apt/lists/*
+sudo rm -rf dev/*
+sudo rm -rf var/log/*
+sudo rm -rf var/tmp/*
+sudo rm -rf var/cache/apt/archives/*.deb
+sudo rm -rf tmp/*
+
+sudo tar -jcpf gateworks_bionic_aarch64.tbz2 ${ROOTFS}
