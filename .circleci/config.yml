@@ -13,24 +13,24 @@ commands:
       build_type:
         type: string
         default: Release
-      build_arch:
+      target_system:
         type: string
         default: x86_64
     steps:
       - run:
-          name: Build << parameters.build_type >> << parameters.build_arch >>
+          name: Build << parameters.build_type >> << parameters.target_system >>
           command: |
             cd $BUILD_DIR
             ninja -j7
       - run:
-          name: Install << parameters.build_type >> << parameters.build_arch >>
+          name: Install << parameters.build_type >> << parameters.target_system >>
           command: |
             cd $BUILD_DIR
             /root/workspace/cmake/bin/cmake --install .
       - persist_to_workspace:
           root: ~/workspace/
           paths:
-            - grpc_install/<< parameters.build_arch >>-<< parameters.build_type >>
+            - grpc_install/<< parameters.target_system >>-<< parameters.build_type >>
 
 jobs:
   build_x86_64:
@@ -38,7 +38,7 @@ jobs:
       build_type:
         type: string
         default: Release
-      build_arch:
+      target_system:
         type: string
         default: x86_64
     docker:
@@ -49,19 +49,20 @@ jobs:
     resource_class: xlarge
     working_directory: ~/workspace/grpc
     environment:
-      BUILD_DIR: build-<< parameters.build_type >>-<< parameters.build_arch >>
+      BUILD_DIR: build-<< parameters.build_type >>-<< parameters.target_system >>
     steps:
       - checkout
       - update_submodules
       - run:
-          name: Configure << parameters.build_type >> << parameters.build_arch >>
+          name: Configure << parameters.build_type >> << parameters.target_system >>
           working_directory: ~/workspace/grpc
           command: |
             mkdir $BUILD_DIR
             cd $BUILD_DIR
-            /root/workspace/cmake/bin/cmake -GNinja -DCMAKE_BUILD_TYPE=<< parameters.build_type >> -DBUILD_SHARED_LIBS=ON -DgRPC_INSTALL=ON -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.build_arch >>-<< parameters.build_type >> ..
+            /root/workspace/cmake/bin/cmake -GNinja -DCMAKE_BUILD_TYPE=<< parameters.build_type >> -DBUILD_SHARED_LIBS=ON \
+            -DgRPC_INSTALL=ON -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.target_system >>-<< parameters.build_type >> ..
       - build_install_and_presist_to_workspace:
-          build_arch: << parameters.build_arch >>
+          target_system: << parameters.target_system >>
           build_type: << parameters.build_type >>
 
   cross_compile:
@@ -69,21 +70,18 @@ jobs:
       build_type:
         type: string
         default: Release
-      build_arch:
+      target_system:
         type: string
         default: calmcar
-      rootfs_dir_name:
-        type: string
-        default: rootfs
     docker:
-      - image: rndottopia/cross-platform-<< parameters.build_arch >>:18.04
+      - image: rndottopia/cross-platform-<< parameters.target_system >>:18.04
         auth:
           username: ottopiarnd
           password: $DOCKERHUB_PASSWORD
     resource_class: xlarge
     working_directory: ~/workspace/grpc
     environment:
-      BUILD_DIR: build-<< parameters.build_type >>-<< parameters.build_arch >>
+      BUILD_DIR: build-<< parameters.build_type >>-<< parameters.target_system >>
       LD_LIBRARY_PATH: /root/workspace/grpc_install/x86_64-Release/lib
     steps:
       - checkout
@@ -91,13 +89,18 @@ jobs:
           at: ../
       - update_submodules
       - run:
-          name: Configure << parameters.build_type >> << parameters.build_arch >>
+          name: Configure << parameters.build_type >> << parameters.target_system >>
           command: |
             mkdir $BUILD_DIR
             cd $BUILD_DIR
-            /root/workspace/cmake/bin/cmake -GNinja -DCMAKE_BUILD_TYPE=<< parameters.build_type >> -DCMAKE_TOOLCHAIN_FILE="/root/workspace/grpc/toolchain/arm-compile-<< parameters.build_arch >>.cmake" -DROOTFS="/root/rootfs/<< parameters.rootfs_dir_name >>/" -DCROSS_COMPILER_PATH="/root/rootfs/toolchain/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/bin/" -DBUILD_SHARED_LIBS=ON -DgRPC_INSTALL=ON -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.build_arch >>-<< parameters.build_type >> -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64-Release/bin/protoc" -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64-Release/bin/grpc_cpp_plugin" ..
+            /root/workspace/cmake/bin/cmake -GNinja -DCMAKE_BUILD_TYPE=<< parameters.build_type >> \
+            -DCMAKE_TOOLCHAIN_FILE="/root/workspace/grpc/toolchain/arm-compile-<< parameters.target_system >>.cmake" \
+            -DROOTFS=$ROOTFS -DCROSS_COMPILER_PATH=$TOOLCHAIN -DBUILD_SHARED_LIBS=ON -DgRPC_INSTALL=ON \
+            -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.target_system >>-<< parameters.build_type >> \
+            -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64-Release/bin/protoc" \
+            -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64-Release/bin/grpc_cpp_plugin" ..
       - build_install_and_presist_to_workspace:
-          build_arch: << parameters.build_arch >>
+          target_system: << parameters.target_system >>
           build_type: << parameters.build_type >>
 
   upload_to_grpc_binary:
@@ -132,23 +135,12 @@ workflows:
             parameters:
               build_type: [ "Release", "Debug"]
       - cross_compile:
-          name: build_gateworks-<< matrix.build_type >>
+          name: build_<< matrix.target_system >>-<< matrix.build_type >>
           context: orb_global
-          build_arch: gateworks
-          rootfs_dir_name: bionic-arm64
           matrix:
             parameters:
               build_type: [ "Release", "Debug"]
-          requires:
-            - build_x86_64
-      - cross_compile:
-          name: build_calmcar-<< matrix.build_type >>
-          context: orb_global
-          build_arch: calmcar
-          rootfs_dir_name: rootfs
-          matrix:
-            parameters:
-              build_type: [ "Release", "Debug"]
+              target_system: [ "calmcar", "gateworks"]
           requires:
             - build_x86_64
       - hold:
@@ -156,7 +148,4 @@ workflows:
       - upload_to_grpc_binary:
           requires:
             - hold
-            - build_gateworks-Release
-            - build_gateworks-Debug
-            - build_calmcar-Release
-            - build_calmcar-Debug
+            - cross_compile
