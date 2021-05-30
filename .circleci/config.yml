@@ -85,7 +85,7 @@ jobs:
     working_directory: ~/workspace/grpc
     environment:
       BUILD_DIR: build-<< parameters.build_type >>-<< parameters.target_system >>
-      LD_LIBRARY_PATH: /root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/lib
+      LD_LIBRARY_PATH: /root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/lib
     steps:
       - checkout
       - attach_workspace:
@@ -100,8 +100,8 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="/root/workspace/grpc/toolchain/arm-compile-<< parameters.target_system >>.cmake" \
             -DROOTFS=$ROOTFS -DCROSS_COMPILER_PATH=$TOOLCHAIN -DBUILD_SHARED_LIBS=ON -DgRPC_INSTALL=ON \
             -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.target_system >>-<< parameters.build_type >> \
-            -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/bin/protoc" \
-            -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/bin/grpc_cpp_plugin" ..
+            -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/bin/protoc" \
+            -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/bin/grpc_cpp_plugin" ..
       - build_install_and_presist_to_workspace:
           target_system: << parameters.target_system >>
           build_type: << parameters.build_type >>
