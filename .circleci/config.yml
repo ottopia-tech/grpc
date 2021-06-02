@@ -33,7 +33,7 @@ commands:
             - grpc_install/<< parameters.target_system >>-<< parameters.build_type >>
 
 jobs:
-  build_x86_64_ubuntu_bionic:
+  build:
     parameters:
       build_type:
         type: string
@@ -41,8 +41,11 @@ jobs:
       target_system:
         type: string
         default: x86_64_ubuntu_bionic
+      ubuntu_version:
+        type: string
+        default: '18.04'
     docker:
-      - image: rndottopia/ubuntu-cmake:18.04
+      - image: rndottopia/ubuntu-cmake:<< parameters.ubuntu_version >>
         auth:
           username: ottopiarnd
           password: $DOCKERHUB_PASSWORD
@@ -82,7 +85,7 @@ jobs:
     working_directory: ~/workspace/grpc
     environment:
       BUILD_DIR: build-<< parameters.build_type >>-<< parameters.target_system >>
-      LD_LIBRARY_PATH: /root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/lib
+      LD_LIBRARY_PATH: /root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/lib
     steps:
       - checkout
       - attach_workspace:
@@ -97,15 +100,15 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="/root/workspace/grpc/toolchain/arm-compile-<< parameters.target_system >>.cmake" \
             -DROOTFS=$ROOTFS -DCROSS_COMPILER_PATH=$TOOLCHAIN -DBUILD_SHARED_LIBS=ON -DgRPC_INSTALL=ON \
             -DCMAKE_INSTALL_PREFIX=/root/workspace/grpc_install/<< parameters.target_system >>-<< parameters.build_type >> \
-            -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/bin/protoc" \
-            -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64_ubuntu_bionic-Release/bin/grpc_cpp_plugin" ..
+            -D_gRPC_PROTOBUF_PROTOC_EXECUTABLE="/root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/bin/protoc" \
+            -D_gRPC_CPP_PLUGIN="/root/workspace/grpc_install/x86_64_ubuntu_bionic-<< parameters.build_type >>/bin/grpc_cpp_plugin" ..
       - build_install_and_presist_to_workspace:
           target_system: << parameters.target_system >>
           build_type: << parameters.build_type >>
 
   upload_to_grpc_binary:
     docker:
-      - image: cimg/base:stable-18.04
+      - image: cimg/base:stable-20.04
     resource_class: small
     working_directory: ~/workspace/grpc
     steps:
@@ -128,24 +131,40 @@ jobs:
 workflows:
   build_and_upload:
     jobs:
-      - build_x86_64_ubuntu_bionic:
-          name: build_x86_64_ubuntu_bionic-<< matrix.build_type >>
+      - build:
+          name: build_<< matrix.target_system >>-<< matrix.build_type >>
           context: orb_global
           matrix:
             parameters:
-              build_type: [ "Release", "Debug"]
+              build_type: [ "Release", "Debug" ]
+              target_system: [ "x86_64_ubuntu_bionic", "x86_64_ubuntu_focal" ]
+              ubuntu_version: [ "20.04", "18.04" ]
+            exclude:
+              - build_type: "Release"
+                target_system: "x86_64_ubuntu_bionic"
+                ubuntu_version: "20.04"
+              - build_type: "Debug"
+                target_system: "x86_64_ubuntu_bionic"
+                ubuntu_version: "20.04"
+              - build_type: "Release"
+                target_system: "x86_64_ubuntu_focal"
+                ubuntu_version: "18.04"
+              - build_type: "Debug"
+                target_system: "x86_64_ubuntu_focal"
+                ubuntu_version: "18.04"
       - cross_compile:
           name: build_<< matrix.target_system >>-<< matrix.build_type >>
           context: orb_global
           matrix:
             parameters:
               build_type: [ "Release", "Debug"]
-              target_system: [ "calmcar", "gateworks"]
+              target_system: [ "calmcar"]
           requires:
-            - build_x86_64_ubuntu_bionic
+            - build_x86_64_ubuntu_bionic-<< matrix.build_type >>
       - hold:
           type: approval
       - upload_to_grpc_binary:
           requires:
             - hold
             - cross_compile
+            - build
